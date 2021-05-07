@@ -4,7 +4,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="pygreensens-pijiulaoshi",
+    name="pygreensens-pjlsh",
     version="0.1",
     author="PijiuLaoshi",
     author_email="pijiulaoshi@gmail.com",
