@@ -1,4 +1,11 @@
 """pygreensens"""
-__version__ = "0.1"
+__version__ = "0.3.1"
 
-from .pygreensens import *
+if __name__ != '__main__':
+    from .pygreensens import GreenSens
+    from .const import *
+else:
+    from pygreensens import GreenSens
+    from const import *
+
+
