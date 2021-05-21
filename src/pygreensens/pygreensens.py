@@ -1,107 +1,89 @@
-"""pygreensens.py"""
-import json
+import requests
 import urllib3
-from datetime import date
-from .const import *
 
 urllib3.disable_warnings()
+import json
+from datetime import date
 
-class GreenSens():
-    
-    def __init__(self, username, password, monitored_conditions):
+
+class GreensensApi:
+    def __init__(self, username: str, password: str):
         self._user = username
         self._pass = password
-        self._mcond = monitored_conditions
-        self._sess = urllib3.PoolManager(cert_reqs = 'CERT_NONE')
-        self._token, self._tokendate = self.authenticate()
-        self._auth = "Bearer " + self._token
-        self._headers = {"Content-Type": "application/json", "Authorization": self._auth}
-        self._userdata = None
-        self._plantdata = None
-        self._notifications = None
-        self.fetch_initial_data()
-        
-        self.hubs = self.get_hubs()
-        self.sensors = self.get_sensors()
-        self.plants = self.clean_plantdata()
+        self._host = "https://api.greensens.de/api"
+        self.s = requests.Session()
+        self._at = None
+        self._atd = None
+        self.authenticate()
 
-    def fetch_single_plant(self, sensor_id):
-        data = self.plants[str(sensor_id)]
-        return data
+        self._bearer = f"Bearer {self._at}"
+        self._headers = {"Content-Type": "application/json"}
+        self._data = None
+        # self._hubs = None
+        self._sensors = None
 
-    def get_hubs(self):
-        data = self._plantdata
-        hubs_list = []
-        for item in data:
-            hubs_list.append(item["gatewayId"])
-        return hubs_list
-    def get_sensors(self):
-        data = self._plantdata
-        sensor_list = []
-        for item in data:
-            for i in range(len(item['plants'])):
-                sensor_list.append(str(item['plants'][i]["sensorID"]))
-        return sensor_list
- 
-    def clean_plantdata(self):
-        data = self._plantdata
-        plant_dict = {}
-        for item in data:
-            for i in range(len(item['plants'])):
-                plant_dict[str(item['plants'][i]["sensorID"])] = {}
-                for p in range(len(self._mcond)):
-                    plant_dict[str(item['plants'][i]["sensorID"])][self._mcond[p]] = item['plants'][i][self._mcond[p]]
-        return plant_dict
+        self.update()
+        self.update_sensors()
 
+    def return_data(self):
+        """Return sensor data"""
+        self.update()
+        return self._data
 
+    def return_sensors(self):
+        """Return sensor data"""
+        # self.update()
+        self.update_sensors()
+        return self._sensors
 
+    def update_sensors(self):
+        """Return sensor list"""
+        list = []
+        for key, value in self._data.items():
+            list.append(key)
+        self._sensors = list
 
-    # CONNECTION TO CLOUD #
     def update(self):
-        self.check_tokenage()
-        self.update_plantdata()
+        """Update sensor data"""
+        self._data = self.get_sensordata()
 
-    def fetch_initial_data(self):
-        self.update_plantdata()
-        self.update_userdata()
-        
-    def update_userdata(self):
-        self._userdata = self._get(USER_URL)
-
-    def update_plantdata(self):
-        self._plantdata = self._get(PLANT_URL)['data']['registeredHubs']
-
-    def check_tokenage(self):
-        tokenage = date.today() - self._tokendate
-        tokendays = tokenage.days
-        if tokendays > 5:
-            self._token, self._tokendate = self.authenticate()
+    ## HTTP REQUEST ##
+    def get_sensordata(self):
+        """Make a request."""
+        self.update_access_token()
+        headers = self._headers
+        headers["authorization"] = self._bearer
+        data = self.s.get(
+            f"{self._host}/plants", headers=headers, verify=False, timeout=10
+        )
+        if data.status_code == 200:
+            hubs = data.json()["data"]["registeredHubs"]
+            new_data = {}
+            for hub in hubs:
+                for sensor in hub["plants"]:
+                    new_data[sensor["sensorID"]] = sensor
+            return new_data
         else:
-            days = 5 - tokendays
-            print(f"Token is still valid for {days} days")
-            
+            return self._data
+
+    ## AUTH ##
     def authenticate(self):
-        payload = {"login": self._user, "password": self._pass}
-        req_url = USER_URL + "/authenticate"
-        j_payload = json.dumps(payload)
-        r = self._sess.request('POST', req_url, headers={"Content-Type": "application/json"}, body=j_payload)
-        token = json.loads(r.data.decode('utf-8'))['data']['token']
+        url = f"{self._host}/users/authenticate"
+        payload = json.dumps({"login": self._user, "password": self._pass})
+        r = self.s.post(
+            url, headers={"Content-Type": "application/json"}, data=payload, timeout=10
+        )
+        token = r.json()["data"]["token"]
         auth_date = date.today()
-        return token, auth_date
+        self._at = token
+        self._atd = auth_date
 
-    def _post(self, url, payload={}):
-        r_url = url
-        if item:
-            r_url = url + item
-        j_payload = json.dumps(payload)
-        r = self._sess.request('POST', r_url, headers=self._headers, body=j_payload)
-        data = json.loads(r.data.decode('utf-8'))
-        return(data)    
+    def update_access_token(self):
+        if self._at == None:
+            self.authenticate()
+        tokenage = date.today() - self._atd
+        if tokenage.days > 4:
+            self.authenticate()
 
-    def _get(self, url, item=None):
-        r_url = url
-        if item:
-            r_url = url + item
-        r = self._sess.request('GET', r_url, headers=self._headers)
-        data = json.loads(r.data.decode('utf-8'))
-        return(data)
+
+##===============================##
