@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="pygreensens",
-    version="0.3.1",
+    version="0.3.6",
     author="PijiuLaoshi",
     author_email="pijiulaoshi@gmail.com",
     description="Python package for GreenSens Plant Sensor Api",
